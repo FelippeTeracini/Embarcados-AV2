@@ -88,9 +88,32 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+ typedef struct {
+	 const uint8_t *data;
+	 uint16_t width;
+	 uint16_t height;
+	 uint8_t dataSize;
+ } tImage;
+  typedef struct {
+	  long int code;
+	  const tImage *image;
+  } tChar;
+  
+  typedef struct {
+	  int length;
+	  const tChar *chars;
+	  char start_char;
+	  char end_char;
+  } tFont;
+  
 #include "conf_board.h"
 #include "conf_example.h"
 #include "conf_uart_serial.h"
+#include "ar.h"
+#include "termometro.h"
+#include "soneca.h"
+#include "digital521.h"
 
 /************************************************************************/
 /* LCD + TOUCH                                                          */
@@ -281,9 +304,27 @@ static void mxt_init(struct mxt_device *device)
 void draw_screen(void) {
 	ili9488_set_foreground_color(COLOR_CONVERT(COLOR_WHITE));
 	ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+	ili9488_draw_pixmap(32, 280, ar.width, ar.height + 1, ar.data);
+	ili9488_draw_pixmap(208, 10, soneca.width, soneca.height + 1, soneca.data);
+	ili9488_draw_pixmap(32, 380, termometro.width, termometro.height + 1, termometro.data);
+}
+
+void font_draw_text(tFont *font, const char *text, int x, int y, int spacing) {
+	char *p = text;
+	while(*p != NULL) {
+		char letter = *p;
+		int letter_offset = letter - font->start_char;
+		if(letter <= font->end_char) {
+			tChar *current_char = font->chars + letter_offset;
+			ili9488_draw_pixmap(x, y, current_char->image->width, current_char->image->height, current_char->image->data);
+			x += current_char->image->width + spacing;
+		}
+		p++;
+	}
 }
 
 void draw_button(uint32_t clicked) {
+	/*
 	static uint32_t last_state = 255; // undefined
 	if(clicked == last_state) return;
 	
@@ -297,6 +338,17 @@ void draw_button(uint32_t clicked) {
 		ili9488_draw_filled_rectangle(BUTTON_X-BUTTON_W/2+BUTTON_BORDER, BUTTON_Y-BUTTON_H/2+BUTTON_BORDER, BUTTON_X+BUTTON_W/2-BUTTON_BORDER, BUTTON_Y-BUTTON_BORDER);
 	}
 	last_state = clicked;
+	*/
+}
+
+void draw_edited_screen() {
+	char buffer[40];
+	sprintf(buffer,"%d", 100);
+	font_draw_text(&digital52, buffer, 132, 280, 1);
+	font_draw_text(&digital52, "%", 212, 280, 1);
+	
+	sprintf(buffer,"%d", 15);
+	font_draw_text(&digital52, buffer, 132, 380, 1);
 }
 
 uint32_t convert_axis_system_x(uint32_t touch_y) {
@@ -312,6 +364,7 @@ uint32_t convert_axis_system_y(uint32_t touch_x) {
 }
 
 void update_screen(uint32_t tx, uint32_t ty) {
+	/*
 	if(tx >= BUTTON_X-BUTTON_W/2 && tx <= BUTTON_X + BUTTON_W/2) {
 		if(ty >= BUTTON_Y-BUTTON_H/2 && ty <= BUTTON_Y) {
 			draw_button(1);
@@ -319,6 +372,7 @@ void update_screen(uint32_t tx, uint32_t ty) {
 			draw_button(0);
 		}
 	}
+	*/
 }
 
 void mxt_handler(struct mxt_device *device, uint *x, uint *y)
@@ -383,7 +437,11 @@ void task_lcd(void){
 	configure_lcd();
   
   draw_screen();
+  draw_edited_screen();
   draw_button(0);
+  
+  font_draw_text(&digital52, "HH:MM", 10, 10, 1);
+  
   touchData touch;
     
   while (true) {  
