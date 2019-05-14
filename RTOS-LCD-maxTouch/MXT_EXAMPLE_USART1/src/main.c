@@ -398,7 +398,8 @@ void draw_user_temp(uint32_t user_temp){
 
 static int32_t convert_adc_to_volume(int32_t ADC_value){
 	
-	return (ADC_value*101 / MAX_DIGITAL);
+	uint32_t max_temp = 100;
+	return (ADC_value*(max_temp + 1) / MAX_DIGITAL);
 }
 
 static void AFEC_Temp_callback(void)
@@ -622,8 +623,11 @@ void task_lcd(void){
   io_init();
   touchData touch;
   uint32_t temp;
+  uint32_t max_temp = 100;
+  uint32_t max_user_temp = 100;
+  uint32_t min_user_temp = 0;
   uint32_t user_temp = 20;
-  uint32_t user_temp_increment = 10;
+  uint32_t user_temp_increment = 1;
   uint32_t duty;
   
   draw_user_temp(user_temp);
@@ -634,19 +638,25 @@ void task_lcd(void){
 		  draw_temp(temp);
 	  }
 	  if( xSemaphoreTake(xSemaphoreUp, ( TickType_t ) 500) == pdTRUE ){
-		  if(user_temp < 100){
+		  if(user_temp < max_user_temp){
 			  user_temp += user_temp_increment;
 		  }
 		 draw_user_temp(user_temp);
 	  }
 	  if( xSemaphoreTake(xSemaphoreDown, ( TickType_t ) 500) == pdTRUE ){
-		  if(user_temp > 0){
+		  if(user_temp > min_user_temp){
 			  user_temp -= user_temp_increment;
 		  }
 		  draw_user_temp(user_temp);
 	  }
 	  
-	  duty = user_temp;
+	  if((temp > user_temp) && ((max_temp - user_temp) != 0)){
+		  duty = 100 * (temp - user_temp) / (max_temp - user_temp);
+	  }
+	  else{
+		  duty = 0;
+	  }
+	  printf("DUTY: %d", duty);
 	  draw_pot(duty);
 	  xQueueSend( xQueueDuty, &duty, 0);
 	  
