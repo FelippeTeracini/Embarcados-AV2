@@ -396,6 +396,17 @@ void draw_user_temp(uint32_t user_temp){
 	font_draw_text(&digital52, buffer_user_temp, 152, 180, 1);
 }
 
+void draw_temp_meter(uint32_t temp){
+	
+	int height = temp * 40 / 100;
+	
+	ili9488_set_foreground_color(COLOR_CONVERT(COLOR_RED));
+	ili9488_draw_filled_rectangle(48, 430, 50, 430 - height);
+	
+	ili9488_set_foreground_color(COLOR_CONVERT(COLOR_BLACK));
+	ili9488_draw_filled_rectangle(48, 390, 50, 390 + 40 - height);
+}
+
 static int32_t convert_adc_to_volume(int32_t ADC_value){
 	
 	uint32_t max_temp = 100;
@@ -633,17 +644,18 @@ void task_lcd(void){
   draw_user_temp(user_temp);
     
   while (true) {
-	  if (xQueueReceive( xQueueAfec, &(temp), ( TickType_t )  500 / portTICK_PERIOD_MS)) {
+	  if (xQueueReceive( xQueueAfec, &(temp), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
 		  printf("%d\n", temp);
 		  draw_temp(temp);
+		  draw_temp_meter(temp);
 	  }
-	  if( xSemaphoreTake(xSemaphoreUp, ( TickType_t ) 500) == pdTRUE ){
+	  if( xSemaphoreTake(xSemaphoreUp, ( TickType_t ) 10) == pdTRUE ){
 		  if(user_temp < max_user_temp){
 			  user_temp += user_temp_increment;
 		  }
 		 draw_user_temp(user_temp);
 	  }
-	  if( xSemaphoreTake(xSemaphoreDown, ( TickType_t ) 500) == pdTRUE ){
+	  if( xSemaphoreTake(xSemaphoreDown, ( TickType_t ) 10) == pdTRUE ){
 		  if(user_temp > min_user_temp){
 			  user_temp -= user_temp_increment;
 		  }
@@ -671,7 +683,8 @@ void task_afec(void){
 	while (true){
 		printf("loop afec\n");
 		afec_start_software_conversion(AFEC0);
-		vTaskDelay(4000 / portTICK_PERIOD_MS);
+		/*vTaskDelay(4000 / portTICK_PERIOD_MS);*/
+		vTaskDelay(10 / portTICK_PERIOD_MS);
 	}
 }
 
