@@ -145,6 +145,9 @@ const uint32_t BUTTON_Y = ILI9488_LCD_HEIGHT/2;
 #define TASK_PWM_STACK_SIZE            (2*1024/sizeof(portSTACK_TYPE))
 #define TASK_PWM_STACK_PRIORITY        (tskIDLE_PRIORITY)
 
+#define TASK_TIMER_STACK_SIZE            (2*1024/sizeof(portSTACK_TYPE))
+#define TASK_TIMER_STACK_PRIORITY        (tskIDLE_PRIORITY)
+
 #define AFEC_CHANNEL_TEMP_SENSOR AFEC_CHANNEL_0
 
 #define MAX_DIGITAL     (4095UL)
@@ -182,6 +185,7 @@ QueueHandle_t xQueueDuty;
 
 SemaphoreHandle_t xSemaphoreUp;
 SemaphoreHandle_t xSemaphoreDown;
+SemaphoreHandle_t xSemaphoreTime;
 
 /************************************************************************/
 /* RTOS hooks                                                           */
@@ -368,7 +372,7 @@ void draw_init_screen(void){
 	ili9488_set_foreground_color(COLOR_CONVERT(COLOR_BLACK));
 	ili9488_draw_filled_rectangle(0, 150, ILI9488_LCD_WIDTH-1, 160);
 	
-	font_draw_text(&digital52, "HH:MM", 10, 10, 1);
+	font_draw_text(&digital52, "00:00", 10, 10, 1);
 	font_draw_text(&digital52, "100", 152, 280, 1);
 	font_draw_text(&digital52, "%", 232, 280, 1);
 	font_draw_text(&digital52, "15", 152, 380, 1);
@@ -405,6 +409,13 @@ void draw_temp_meter(uint32_t temp){
 	
 	ili9488_set_foreground_color(COLOR_CONVERT(COLOR_BLACK));
 	ili9488_draw_filled_rectangle(48, 390, 50, 390 + 40 - height);
+}
+
+void draw_time(uint32_t minutes, uint32_t hours){
+	
+	char buffer_time[40];
+	sprintf(buffer_time,"%02d:%02d", hours, minutes);
+	font_draw_text(&digital52, buffer_time, 10, 10, 1);
 }
 
 static int32_t convert_adc_to_volume(int32_t ADC_value){
@@ -633,6 +644,8 @@ void task_lcd(void){
   draw_init_screen();
   io_init();
   touchData touch;
+  uint32_t minutes = 0;
+  uint32_t hours = 0;
   uint32_t temp;
   uint32_t max_temp = 100;
   uint32_t max_user_temp = 100;
@@ -661,6 +674,17 @@ void task_lcd(void){
 		  }
 		  draw_user_temp(user_temp);
 	  }
+	  if( xSemaphoreTake(xSemaphoreTime, ( TickType_t ) 10) == pdTRUE ){
+		  minutes += 1;
+		  if(minutes > 59){
+			  hours += 1;
+			  minutes = 0;
+		  }
+		  if(hours > 23){
+			  hours = 0;
+		  }
+		  draw_time(minutes, hours);
+	  }
 	  
 	  if((temp > user_temp) && ((max_temp - user_temp) != 0)){
 		  duty = 100 * (temp - user_temp) / (max_temp - user_temp);
@@ -683,6 +707,7 @@ void task_afec(void){
 	while (true){
 		printf("loop afec\n");
 		afec_start_software_conversion(AFEC0);
+		/*Task Delay para 4 segundos*/
 		/*vTaskDelay(4000 / portTICK_PERIOD_MS);*/
 		vTaskDelay(10 / portTICK_PERIOD_MS);
 	}
@@ -703,6 +728,19 @@ void task_pwm(void){
 		}
 	}
 	
+}
+
+void task_timer(void){
+	
+	xSemaphoreTime = xSemaphoreCreateBinary();
+	
+	while(true){
+		/*Task Delay para tempo de 1 em 1 minuto*/
+		/*vTaskDelay(60000 / portTICK_PERIOD_MS);*/
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xSemaphoreGiveFromISR(xSemaphoreTime, &xHigherPriorityTaskWoken);
+	}
 }
 
 /************************************************************************/
@@ -741,6 +779,10 @@ int main(void)
   
   if (xTaskCreate(task_pwm, "pwm", TASK_PWM_STACK_SIZE, NULL, TASK_PWM_STACK_PRIORITY, NULL) != pdPASS) {
 	  printf("Failed to create test pwm task\r\n");
+  }
+  
+  if (xTaskCreate(task_timer, "timer", TASK_TIMER_STACK_SIZE, NULL, TASK_TIMER_STACK_PRIORITY, NULL) != pdPASS) {
+	  printf("Failed to create test timer task\r\n");
   }
 
   /* Start the scheduler. */
